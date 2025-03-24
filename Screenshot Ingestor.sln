@@ -1,0 +1,27 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35828.75 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Screenshot Ingestor", "Screenshot Ingestor.pyproj", "{E1AF4963-0F28-447A-A1AF-94B89CB48C80}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "main", "..\main\main.pyproj", "{646F177B-0791-443F-80C9-2D8559A0A99B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E1AF4963-0F28-447A-A1AF-94B89CB48C80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1AF4963-0F28-447A-A1AF-94B89CB48C80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{646F177B-0791-443F-80C9-2D8559A0A99B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{646F177B-0791-443F-80C9-2D8559A0A99B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {57E6564D-2DF9-4689-B8C0-49853291E434}
+	EndGlobalSection
+EndGlobal
