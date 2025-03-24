@@ -16,7 +16,8 @@ def resource_path(relative_path: str) -> str:
     return full_path
 
 def preprocess_search_term(term: str) -> str:
-    """Preprocesses a search term."""
+    """Preprocesses a search term, preserving spaces and some punctuation."""
     term = term.strip()
-    term = ''.join(c for c in term if c.isalnum() or c.isspace())
-    return term.lower()
+    # Keep alphanumeric, spaces, and some punctuation (e.g., hyphens)
+    term = ''.join(c for c in term if c.isalnum() or c in " -")
+    return term  # Don't lowsercase here; let autocorrect_term handle case

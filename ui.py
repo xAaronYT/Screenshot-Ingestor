@@ -1,67 +1,43 @@
 # ui.py
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from PIL import Image, ImageTk, ImageGrab
-import cv2
+from PIL import Image, ImageGrab
 import threading
 import logging
-from enum import Enum
 from settings import AppSettings, Config, load_autocorrect_rules, load_item_name_lookup
 from ocr import OCRProcessor
 from api import TarkovAPI
 from utils import preprocess_search_term
 from fuzzywuzzy import process
+from image_processing import ImageDisplay
+from enums import AppState
 
-class AppState(Enum):
-    READY = "Ready"
-    LOADING = "Loading..."
-    PROCESSING = "Processing..."
-    SEARCHING = "Searching Tarkov.dev..."
-    COMPLETED = "Completed"
-    ERROR = "Error"
+class Tooltip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        self.widget.bind("<Enter>", self.show_tip)
+        self.widget.bind("<Leave>", self.hide_tip)
 
-class ImageDisplay:
-    def __init__(self, image_label):
-        self.image_label = image_label
-        self.img = None
-        self.tk_img = None
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x, y, _, _ = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 25
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(tw, text=self.text, justify=tk.LEFT,
+                         background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+                         font=("Arial", "8", "normal"))
+        label.pack(ipadx=1)
 
-    def process_and_display_image(self, img: Image.Image) -> bool:
-        try:
-            img.thumbnail((Config.DEFAULT_IMAGE_WIDTH, Config.DEFAULT_IMAGE_HEIGHT))
-            self.tk_img = ImageTk.PhotoImage(img)
-            self.image_label.config(image=self.tk_img)
-            self.image_label.image = self.tk_img
-            self.img = img
-            return True
-        except Exception as e:
-            logging.error(f"Error processing/displaying image: {e}", exc_info=True)
-            return False
-
-    def load_and_process_image(self, image_source, filename=None, set_status=None):
-        try:
-            if isinstance(image_source, str):
-                img_cv = cv2.imread(image_source, cv2.IMREAD_GRAYSCALE)
-                img_cv = cv2.adaptiveThreshold(img_cv, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-                img = Image.fromarray(img_cv)
-            elif isinstance(image_source, Image.Image):
-                img = image_source
-            else:
-                raise ValueError("Unsupported image source type")
-            if self.process_and_display_image(img):
-                set_status(AppState.READY, message=f"Image loaded: {filename or 'Clipboard Image'}")
-                return True
-            return False
-        except Exception as e:
-            logging.error(f"Error loading image: {e}", exc_info=True)
-            set_status(AppState.ERROR, message="Error loading image")
-            return False
-
-    def clear(self):
-        self.image_label.config(image=None)
-        self.image_label.image = None
-        self.img = None
-        self.tk_img = None
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+        self.tip_window = None
 
 class ScreenshotIngestorApp:
     def __init__(self):
@@ -69,60 +45,158 @@ class ScreenshotIngestorApp:
         self.root.title("Screenshot Ingestor")
         self.root.geometry("1080x720")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.resizable(True, True)
+        self.root.configure(bg="#f0f0f0")
+
+        # Define a style for buttons
+        self.style = ttk.Style()
+        self.style.configure("TButton", font=("Arial", 10))
+        self.style.map("TButton",
+                       background=[("active", "#d0d0d0")],
+                       foreground=[("active", "#000000")])
 
         self.settings = AppSettings()
         self.api = TarkovAPI()
-        self.ocr = OCRProcessor(self.settings)
+        self.ocr = OCRProcessor(self.settings.ocr_use_gpu)
         self.autocorrect_rules = load_autocorrect_rules()
         self.item_name_lookup = load_item_name_lookup()
 
         self.setup_ui()
 
     def setup_ui(self):
+        # Menu
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Exit", command=self.on_closing)
+        settingsmenu = tk.Menu(menubar, tearoff=0)
+        self.gpu_var = tk.BooleanVar(value=self.settings.ocr_use_gpu)
+        settingsmenu.add_checkbutton(label="Use GPU for OCR", variable=self.gpu_var, command=self.toggle_gpu)
         menubar.add_cascade(label="File", menu=filemenu)
+        menubar.add_cascade(label="Settings", menu=settingsmenu)
         self.root.config(menu=menubar)
 
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
-        tk.Button(button_frame, text="Load Screenshot", command=self.load_image).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Paste from Clipboard", command=self.paste_from_clipboard).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear_all).pack(side=tk.LEFT, padx=5)
+        # Main frames
+        left_frame = tk.Frame(self.root, bg="#f0f0f0", bd=1, relief=tk.SUNKEN)
+        left_frame.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.Y)
+        right_frame = tk.Frame(self.root, bg="#f0f0f0", bd=1, relief=tk.SUNKEN)
+        right_frame.pack(side=tk.RIGHT, padx=10, pady=10, expand=True, fill=tk.BOTH)
 
-        self.image_label = tk.Label(self.root)
-        self.image_label.pack(pady=10)
-        self.image_display = ImageDisplay(self.image_label)
+        # Left: Image display
+        tk.Label(left_frame, text="Screenshot", font=("Arial", 12, "bold"), bg="#f0f0f0").pack()
+        self.image_label = tk.Label(left_frame, bg="#f0f0f0")
+        self.image_label.pack()
+        self.image_display = ImageDisplay(self.image_label, self.set_status)
 
-        self.extracted_text_box = tk.Text(self.root, height=10, width=80)
-        self.extracted_text_box.pack(pady=10)
+        # Right: Controls and output
+        button_frame = tk.Frame(right_frame, bg="#f0f0f0")
+        button_frame.pack(fill=tk.X, pady=(0, 10))
+        load_btn = ttk.Button(button_frame, text="Load Screenshot", command=self.load_image, width=15, style="TButton")
+        load_btn.pack(side=tk.LEFT, padx=5)
+        Tooltip(load_btn, "Load an image file")
 
-        self.progress_bar = ttk.Progressbar(self.root, length=800, mode="indeterminate")
-        self.progress_bar.pack(pady=5)
+        paste_btn = ttk.Button(button_frame, text="Paste from Clipb", command=self.paste_from_clipboard, width=15, style="TButton")
+        paste_btn.pack(side=tk.LEFT, padx=5)
+        Tooltip(paste_btn, "Paste an image from clipboard")
 
-        self.tarkov_results_text = tk.Text(self.root, height=10, width=80, state=tk.DISABLED)
-        self.tarkov_results_text.pack(pady=10)
+        clear_btn = ttk.Button(button_frame, text="Clear", command=self.clear_all, width=15, style="TButton")
+        clear_btn.pack(side=tk.LEFT, padx=5)
+        Tooltip(clear_btn, "Clear all fields")
 
-        self.status_label = tk.Label(self.root, text="Ready")
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+        copy_results_btn = ttk.Button(button_frame, text="Copy Results", command=self.copy_results, width=15, style="TButton")
+        copy_results_btn.pack(side=tk.LEFT, padx=5)
+        Tooltip(copy_results_btn, "Copy API results to clipboard")
+
+        copy_extracted_btn = ttk.Button(button_frame, text="Copy Extracted", command=self.copy_extracted_text, width=15, style="TButton")
+        copy_extracted_btn.pack(side=tk.LEFT, padx=5)
+        Tooltip(copy_extracted_btn, "Copy extracted text to clipboard")
+
+        # Extracted text with label and scrollbar
+        extracted_frame = tk.Frame(right_frame, bg="#f0f0f0")
+        extracted_frame.pack(pady=5, fill=tk.BOTH, expand=True)
+        tk.Label(extracted_frame, text="Extracted Text", font=("Arial", 12, "bold"), bg="#f0f0f0").pack(anchor="w")
+        self.extracted_text_box = tk.Text(extracted_frame, height=10, width=80, font=("Arial", 12), bg="#e8e8e8")
+        scrollbar1 = tk.Scrollbar(extracted_frame, command=self.extracted_text_box.yview)
+        self.extracted_text_box.config(yscrollcommand=scrollbar1.set)
+        self.extracted_text_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar1.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Tarkov results with label and scrollbar
+        results_frame = tk.Frame(right_frame, bg="#f0f0f0")
+        results_frame.pack(pady=5, fill=tk.BOTH, expand=True)
+        tk.Label(results_frame, text="Tarkov API Results", font=("Arial", 12, "bold"), bg="#f0f0f0").pack(anchor="w")
+        self.tarkov_results_text = tk.Text(results_frame, height=10, width=80, font=("Arial", 12), state=tk.DISABLED, bg="#e8e8e8")
+        scrollbar2 = tk.Scrollbar(results_frame, command=self.tarkov_results_text.yview)
+        self.tarkov_results_text.config(yscrollcommand=scrollbar2.set)
+        self.tarkov_results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar2.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Bottom: Progress and status
+        status_frame = tk.Frame(self.root, bg="#d0d0d0", bd=2, relief=tk.RAISED)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=2)
+        self.status_label = tk.Label(status_frame, text="Ready", font=("Arial", 14, "bold"), bg="#d0d0d0")
+        self.status_label.pack(fill=tk.X, padx=10, pady=5)
+        self.progress_bar = ttk.Progressbar(self.root, length=1000, mode="indeterminate")
+        self.progress_bar.pack(side=tk.BOTTOM, pady=5)
 
     def set_status(self, state: AppState, message: str = None):
         status_text = f"{state.value}" + (f" - {message}" if message else "")
         self.status_label.config(text=status_text)
+        colors = {
+            AppState.READY: ("green", "#e0ffe0"),
+            AppState.PROCESSING: ("blue", "#e0e0ff"),
+            AppState.COMPLETED: ("green", "#e0ffe0"),
+            AppState.ERROR: ("red", "#ffe0e0"),
+            AppState.SEARCHING: ("blue", "#e0e0ff"),
+            AppState.LOADING: ("blue", "#e0e0ff")
+        }
+        fg_color, bg_color = colors.get(state, ("black", "#d0d0d0"))
+        self.status_label.config(fg=fg_color, bg=bg_color)
+        self.status_label.master.config(bg=bg_color)
         self.root.update_idletasks()
         logging.info(f"Status updated to: {status_text}")
+
+    def toggle_gpu(self):
+        self.settings.ocr_use_gpu = self.gpu_var.get()
+        self.ocr = OCRProcessor(self.settings.ocr_use_gpu)
+        self.settings.save_settings()
+        self.set_status(AppState.READY, f"OCR GPU set to: {self.settings.ocr_use_gpu}")
+
+    def copy_results(self):
+        results = self.tarkov_results_text.get("1.0", tk.END).strip()
+        if not results:
+            self.set_status(AppState.ERROR, "No results to copy.")
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(results)
+            self.root.update()
+            self.set_status(AppState.COMPLETED, "API results copied to clipboard.")
+        except Exception as e:
+            self.set_status(AppState.ERROR, f"Error copying results: {e}")
+
+    def copy_extracted_text(self):
+        text = self.extracted_text_box.get("1.0", tk.END).strip()
+        if not text:
+            self.set_status(AppState.ERROR, "No extracted text to copy.")
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.root.update()
+            self.set_status(AppState.COMPLETED, "Extracted text copied to clipboard.")
+        except Exception as e:
+            self.set_status(AppState.ERROR, f"Error copying extracted text: {e}")
 
     def load_image(self):
         filename = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp"), ("All files", "*.*")])
         if filename:
-            self.image_display.load_and_process_image(filename, filename=filename, set_status=self.set_status)
+            self.image_display.load_and_process_image(filename, filename=filename)
             self.extract_text()
 
     def paste_from_clipboard(self):
         clipboard_content = ImageGrab.grabclipboard()
         if isinstance(clipboard_content, Image.Image):
-            self.image_display.load_and_process_image(clipboard_content, set_status=self.set_status)
+            self.image_display.load_and_process_image(clipboard_content)
             self.extract_text()
 
     def extract_text(self):
@@ -154,11 +228,11 @@ class ScreenshotIngestorApp:
         threading.Thread(target=do_ocr, daemon=True).start()
 
     def autocorrect_term(self, term: str) -> str:
-        term = term.lower()
-        if term in self.autocorrect_rules:
-            return self.autocorrect_rules[term]
+        term_lower = term.lower()
+        if term_lower in self.autocorrect_rules:
+            return self.autocorrect_rules[term_lower]
         if self.settings.use_item_corrections and self.item_name_lookup:
-            best_match, score = process.extractOne(term, self.item_name_lookup.keys())
+            best_match, score = process.extractOne(term_lower, self.item_name_lookup.keys())
             if score >= Config.FUZZY_MATCH_THRESHOLD:
                 return best_match
         return term
@@ -182,6 +256,7 @@ class ScreenshotIngestorApp:
                     self.tarkov_results_text.insert(tk.END, f"  Name: {item['name']}\n  Avg Price: {item['avg24hPrice']}\n")
             else:
                 self.tarkov_results_text.insert(tk.END, f"Item: {item_name} (x{count}) - No data found\n")
+                logging.warning(f"No API data found for item: {item_name}")
 
         self.tarkov_results_text.config(state=tk.DISABLED)
         self.set_status(AppState.COMPLETED, "Search completed.")

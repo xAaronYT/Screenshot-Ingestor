@@ -1,0 +1,59 @@
+Item: es lamp (x1)
+  Name: Energy-saving lamp
+  Avg Price: 10229
+Item: insulating tape (x1)
+  Name: Insulating tape
+  Avg Price: 25278
+Item: can of white salt (x1)
+  Name: Can of white salt
+  Avg Price: 9195
+Item: tnt brick (x1)
+  Name: TP-200 TNT brick
+  Avg Price: 35928
+Item: toolset (x2)
+  Name: Toolset
+  Avg Price: 33202
+Item: mcable (x2)
+  Name: Military cable
+  Avg Price: 35154
+Item: viibiin sneaker (x1)
+  Name: Viibiin sneaker
+  Avg Price: 50335
+Item: tetriz (x1)
+  Name: Tetriz portable game console
+  Avg Price: 302865
+Item: nails (x3)
+  Name: Pack of nails
+  Avg Price: 13895
+Item: prokhodimec (x1) - No data found
+Item: firesteel (x1)
+  Name: Old firesteel
+  Avg Price: 39999
+Item: broken lcd (x1)
+  Name: Broken LCD
+  Avg Price: 29879
+Item: paid (x2)
+  Name: PAID AntiRoach spray
+  Avg Price: 30477
+Item: electric drill (x1)
+  Name: Electric drill
+  Avg Price: 45199
+Item: diary (x1)
+  Name: Diary
+  Avg Price: 31275
+Item: goldchain (x1)
+  Name: Golden neck chain
+  Avg Price: 30185
+Item: silver badge (x1)
+  Name: Silver Badge
+  Avg Price: 37981
+Item: gold skull ring (x1)
+  Name: Gold skull ring
+  Avg Price: 39841
+Item: working lcd (x1)
+  Name: Working LCD
+  Avg Price: 24892
+Item: can of humpback salmon (x1)
+  Name: Can of humpback salmon
+  Avg Price: 23876
+
